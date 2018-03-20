@@ -3,11 +3,13 @@
 #include <wdf.h>
 #include <ntintsafe.h>
 #include "PCIDRV.H"
+#include "PCIIOCTL.H"
 
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text(INIT, DriverEntry)
 #pragma alloc_text(PAGE, PciDrvEvtDeviceAdd)
 #pragma alloc_text (PAGE, PciDrvEvtDriverContextCleanup)
+#pragma alloc_text (PAGE, PciDrvEvtDeviceContextCleanup)
 #endif
 
 NTSTATUS DriverEntry(
@@ -58,13 +60,75 @@ NTSTATUS PciDrvEvtDeviceAdd(
    UNUSED(a_Driver);
    UNUSED(a_DeviceInit);
 
+   WDF_OBJECT_ATTRIBUTES           l_fdoAttributes;
+   NTSTATUS l_status = STATUS_SUCCESS;
+
+   PAGED_CODE();
+
+   WdfDeviceInitSetIoType(a_DeviceInit, WdfDeviceIoBuffered);
+
+   //
+   // Specify the context type an size for the device we are about to create.
+   //
+   WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&l_fdoAttributes, FDO_DATA);
+
+   l_fdoAttributes.EvtCleanupCallback = PciDrvEvtDeviceContextCleanup;
+
+   if (!NT_SUCCESS(l_status))
+   {
+      return l_status;
+   }
+
    return STATUS_SUCCESS;
 }
 
-VOID
-PciDrvEvtDriverContextCleanup(
+VOID PciDrvEvtDriverContextCleanup(
    IN WDFOBJECT Driver
 )
 {
    UNUSED(Driver);
+}
+
+VOID PciDrvEvtDeviceCOntextCleanup(
+   WDFOBJECT Device
+)
+{
+   UNUSED(Device);
+}
+
+VOID PciDrvEvtIoDeviceControl(
+   IN WDFQUEUE   a_Queue,
+   IN WDFREQUEST a_Request,
+   IN size_t     a_OutputBufferLength,
+   IN size_t     a_InputBufferLength,
+   IN ULONG      a_IoControlCode
+)
+{
+   UNUSED(a_InputBufferLength);
+   UNUSED(a_OutputBufferLength);
+
+   NTSTATUS  l_status = STATUS_SUCCESS;
+   WDFDEVICE l_hDevice = WdfIoQueueGetDevice(a_Queue);
+   PFDO_DATA l_fdoData = FdoGetData(l_hDevice);
+
+   UNUSED(l_fdoData);
+
+   WDF_REQUEST_PARAMETERS l_params;
+
+   WDF_REQUEST_PARAMETERS_INIT(&l_params);
+
+   WdfRequestGetParameters(
+      a_Request,
+      &l_params
+   );
+
+   switch (a_IoControlCode)
+   {
+      case IOCTL_PCI_READ_CONFIG:
+      case IOCTL_PCI_WRITE_CONFIG:
+
+         // Do nothing for now.
+         l_status = STATUS_ABANDONED;
+         break;
+   }
 }
